@@ -1,0 +1,189 @@
+# important modules
+import re
+import math
+import random
+
+# SYLLABLE PARSING CODE
+
+# opening text file and creating a list of all entries
+f = open ("p-p.txt", "r") 
+words = f.readlines()
+
+# extracting first column of the text file (just the words)
+for i in range(len(words)): 
+    words[i] = re.split ('  ', words[i])[0]
+
+# extracting the onset of each word, if any (parsing at first vowel)
+onsets = []
+for i in range (len(words)): 
+    onsets.append(re.split('a|e|i|o|u', words[i])[0])
+
+# creating a dictionary of all the onsets we extracted (format: onset, frequency)
+onset_dict = {}
+for o in onsets:
+    if o in onset_dict: onset_dict[o] += 1
+    else: onset_dict[o] = 1
+del onset_dict['']
+
+# sorting onset dictionary by frequency 
+onset_dict = dict (sorted(onset_dict.items(), key=lambda x: x[1], reverse=True))
+
+# deleting all onsets that occur less than 10 times (MAYBE CHANGE THIS)
+valid_onsets = {key:value for (key,value) in onset_dict.items() if value >= 10}
+
+# based on the fact that y is only a consonant at the start of a word or syllable (MAYBE CHANGE THIS), 
+# removing all the onsets that contain a y which is not at the start 
+# https://www.woodwardenglish.com/letter-y-vowel-or-consonant/
+valid_onsets = {key:value for (key,value) in valid_onsets.items() if 'y' not in key or key[0] == 'y'}
+
+# we now have a dictionary of 65 valid onsets, ranked by frequency !!
+
+# function which accepts a word and outputs a list of its distinct syllables
+def syllables (word): 
+    vowels = ['a', 'e', 'i', 'o', 'u']
+    
+    # letter pairs that are not valid onsets by themselves, but are part of a three-consonant valid onset
+    exceptions = ['hr', 'hl'] 
+    
+    # default initial values
+    sylls = []
+    check_onset = False
+    syllable = ""
+    onset = ""
+
+    # looping through the word, end to beginning, using an accumulator to keep track of the letters 
+    # we've checked. when a vowel is reached, the variable check_onset is set to true, at which 
+    # point the letters leading up to the vowel are used to create the longest onset possible. 
+    # once this onset is formed, the onset + vowel + consonants acculumated after the vowel are 
+    # concatonated to form a syllable, which is stored in the sylls list. once the syllable is formed 
+    # and stored, check_onset is reset to false and the process of creating another syllable begins anew. 
+    for i in range (len(word) - 1, -1, -1): 
+
+        # 1. occurs when we are NOT interested in whether the current letter is part of a valid onset
+         if not check_onset:
+            
+            # add the current letter to our syllable accumulator
+            syllable = word[i] + syllable
+            
+            # if we've made it to the first letter of the word and we don't care about whether
+            # it's part of an onset (it's probably a vowel), then we just store the entire
+            # syllable we've accumulated thus far
+            if i == 0: 
+                sylls.insert(0, syllable)
+            
+            # if we encounter an "ing" in our syllable accumulator, and we note that the letters 
+            # preceding this syllable form a valid word in our database, we store "ing" as its
+            # own syllable and restart the syllable accumulating process
+            elif syllable == "ing" and len (word[:i]) >=2 and word[:i] in words: 
+                sylls.insert (0, syllable)
+                syllable = ""
+           
+            # if we've hit a vowel that is not preceded by another vowel (i.e. either a lone
+            # vowel or the first vowel in a series of vowels), we trigger the onset check (CHANGE THIS)
+            elif word[i] in vowels and word [i - 1] not in vowels: 
+                check_onset = True
+
+                # if a word ends in an e, we assume that the e
+                # is silent and therefore do not trigger an onset check (CHANGE THIS)
+                if i == len (word) - 1 and word[i] == 'e' : 
+                    check_onset = False
+            
+            # if the last letter of the word is y and the second to last letter is not a vowel, 
+            # we treat y as a vowel and trigger an onset check (MAYBE CHANGE THIS)
+            elif i == len(word) - 1 and word[i] == 'y' and word [i-1] not in vowels: 
+                check_onset = True
+
+         # 2. occurs when we ARE interested in whether the current letter is part of a valid onset
+         else: 
+
+            # add the current letter to our onset accumulator
+            onset = word[i] + onset
+
+            # 2a. if we've made it to the first letter of the word, we have to check to see
+            # whether the onset we've accumulated is a valid onset or not. if it is, we can 
+            # add it in front of the vowel + other consonants we've accumulated to make a syllable.
+            # if it is not, then we assume the letter is its own syllable and add two entries to
+            # our syllable list — the letter, and the fragment of the onset that was valid + the vowel
+            # + the rest of the consonants
+            if i == 0:
+                if not onset in valid_onsets: 
+                    sylls.insert(0, onset[1 : len(onset)] + syllable)
+                    sylls.insert(0, word[i])
+                else: 
+                    sylls.insert (0, onset + syllable)
+
+            # 2b. if the onset we've accumulated thus far is not valid (and isn't a valid onset fragment
+            # stored in exceptions), then we first add the valid onset fragment + vowel + other 
+            # accumulated consonants to our syllable list, and reset our syllable accumulator
+            # to include just the letter we rejected as part of the valid onset. we also reset
+            # the onset accumulator since we've established that the current letter is not 
+            # part of an onset. finally, we determine whether or not we're supposed to continue
+            # building our current onset, and store this answer in check_onset
+            elif not onset in valid_onsets and (not onset in exceptions):
+                sylls.insert(0, onset[1 : len(onset)] + syllable)
+                syllable = word[i]
+                onset = ""
+                
+                # if we have an e at the end our new syllable, we assume it is silent and 
+                # do not start checking for onsets (CHANGE THIS)
+                
+                # if word[i] == 'e': 
+                #     check_onset = False
+
+                # if we have a single vowel at the end of our new syllable, we start
+                # checking for onsets (CHANGE THIS)
+                if word[i] in vowels and word [i - 1] not in vowels: 
+                    check_onset = True
+                
+                # if we have a y that is not preceded by a vowel at the end of our new
+                # syllable, we start checking for onsets
+                elif word[i] == 'y' and word [i - 1] not in vowels: 
+                    check_onset = True
+                
+                # by default, we assume we're not checking for onsets because we just
+                # starting accumulating a new syllable
+                else: 
+                    check_onset = False
+
+            # note that if neither 2a nor 2b is triggered, all we have done is add the
+            # current letter to our onset accumulator and assume that we should continue
+            # searching for a valid onset before we can create a new syllable
+                
+    return (sylls)
+    
+    
+    print("word: " + word)
+    print("check onset: " + str(check_onset))
+    print("onset: " + onset)
+    print ("syllable WIP: " + str(syllable))
+    print ("syllables: "+ str(sylls))
+    print()
+
+# syllables ("sneaker")
+# syllables("person")
+# syllables("towel")
+# syllables("pea")
+# syllables("pen")
+# syllables("shoe")
+# syllables("okay")
+# syllables("about")
+# syllables("maria")
+# syllables ("little")
+# syllables ("happy")
+# syllables ("anything")
+# syllables ("through")
+# syllables ("one")
+# syllables ("something")
+
+
+# for i in range (300, 500): 
+#     print (words[i] + ": " + str(syllables(words[i])))
+
+# print ("ple: " + str("pl" in valid_onsets))
+# print ("tle: " + str("tle" in valid_onsets))
+# print ("thr: " + str("thr" in valid_onsets))
+
+with open ('syllables1.txt', 'w') as f: 
+    for w in words: 
+        f.write(w + ": " + str(syllables(w)))
+        f.write ('\n')
